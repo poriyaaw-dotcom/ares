@@ -1,0 +1,33 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Python cache / local runtime files
+__pycache__/
+*.py[cod]
+*.log
+
+# Local database files (the app creates the database automatically)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# macOS metadata
+.DS_Store
+
+# Python virtual environments (CRITICAL: backend/venv/ must never be pushed)
+venv/
+.venv/
+env/
+ENV/
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Windows metadata (harmless, in case anyone else clones on Windows)
+Thumbs.db
+desktop.ini
