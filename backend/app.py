@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import smtplib
-from email.message import EmailMessage
 import hashlib
 import hmac
 import os
@@ -36,10 +34,6 @@ MAX_BODY_BYTES = int(os.getenv("MAX_BODY_BYTES", "12000"))
 HMAC_SECRET = os.getenv("HMAC_SECRET", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-SMTP_HOST = os.getenv("SMTP_HOST", "")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 NOTIFICATION_EMAIL = os.getenv("NOTIFICATION_EMAIL", "")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 TRUST_PROXY = os.getenv("TRUST_PROXY", "false").lower() == "true"
@@ -94,7 +88,6 @@ def init_db() -> None:
 
 
 def normalize_phone(value: str) -> str:
-    # Keep the public form deliberately strict: ASCII digits only, with an optional +98 prefix.
     value = value.strip()
     if any(ch not in "+0123456789" for ch in value):
         return ""
@@ -107,8 +100,6 @@ def normalize_phone(value: str) -> str:
 
 
 def get_client_hash(request: Request) -> str:
-    # We intentionally do not store the visitor's raw IP. Forwarded headers are trusted only when
-    # the deployment explicitly opts in (and should only be enabled behind a trusted proxy).
     ip = request.client.host if request.client else "unknown"
     if TRUST_PROXY:
         forwarded_for = request.headers.get("x-forwarded-for", "")
@@ -125,7 +116,6 @@ def rate_limit_cutoff() -> str:
 
 
 def save_contact_request(payload: "ContactRequest", client_hash: str, now: str) -> int:
-    # One write transaction makes the rate-limit check + insert atomic under concurrent requests.
     with closing(db_connect()) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
@@ -276,7 +266,6 @@ app = FastAPI(
 app.add_middleware(BodySizeLimitMiddleware, max_body_size=MAX_BODY_BYTES)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Serve the existing frontend assets without changing their paths.
 for _asset_dir in ("css", "js", "images", "img", "assets", "fonts", "logo"):
     _asset_path = BASE_DIR / _asset_dir
     if _asset_path.is_dir():
@@ -319,8 +308,6 @@ def startup() -> None:
 
 @app.get("/logo/{filename}", include_in_schema=False)
 async def logo(filename: str):
-    # Serve the existing logo explicitly so the frontend logo works even if
-    # StaticFiles mounting behaves differently across environments.
     if filename != "YOUR-LOGO.png":
         raise HTTPException(status_code=404, detail="Logo not found")
     logo_path = BASE_DIR / "logo" / filename
@@ -388,39 +375,47 @@ async def send_telegram_notification(text: str, request_id: int) -> None:
 
 
 def _send_email_sync(subject: str, body: str) -> None:
-    """Synchronous Gmail SMTP operation, run in a worker thread."""
-    message = EmailMessage()
-    message["From"] = SMTP_USERNAME
-    message["To"] = NOTIFICATION_EMAIL
-    message["Subject"] = subject
-    message.set_content(body)
+    """HTTPS email via Resend API (immune to SMTP port/DPI blocks)."""
+    resend_api_key = os.getenv("RESEND_API_KEY", "")
+    resend_from = os.getenv("RESEND_FROM", "ARES Contact <onboarding@resend.dev>")
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=12) as smtp:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.ehlo()
-        smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
-        smtp.send_message(message)
+    if not resend_api_key:
+        logger.warning("RESEND_API_KEY is not set. Skipping email.")
+        return
+
+    try:
+        resp = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {resend_api_key}"},
+            json={
+                "from": resend_from,
+                "to": [NOTIFICATION_EMAIL],
+                "subject": subject,
+                "text": body,
+            },
+            timeout=15.0,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Resend rejected email: HTTP %s: %s",
+                       exc.response.status_code, exc.response.text[:200])
+    except httpx.RequestError as exc:
+        logger.warning("Could not reach Resend API: %s", exc.__class__.__name__)
 
 
 async def send_email_notification(
     subject: str, body: str, request_id: int
 ) -> None:
     """Try email without allowing notification failure to affect the request."""
-    if not all((SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD, NOTIFICATION_EMAIL)):
-        logger.warning(
-            "Email notification is not configured; request_id=%s", request_id
-        )
+    if not (os.getenv("RESEND_API_KEY", "") and NOTIFICATION_EMAIL):
+        logger.warning("Email notification is not configured; request_id=%s", request_id)
         return
 
     try:
         await asyncio.to_thread(_send_email_sync, subject, body)
-    except (OSError, smtplib.SMTPException) as exc:
-        logger.warning(
-            "Could not send email for request_id=%s: %s",
-            request_id,
-            exc.__class__.__name__,
-        )
+    except Exception as exc:
+        logger.warning("Could not send email for request_id=%s: %s",
+                       request_id, exc.__class__.__name__)
 
 
 @app.post("/api/contact")
@@ -442,7 +437,6 @@ async def create_contact(payload: ContactRequest, request: Request):
         f"🆔 شماره درخواست: {request_id}"
     )
 
-    # both channels work ... they dont mess with each other ...telegram dont work cause of IRAN -_-
     await send_telegram_notification(notification_text, request_id)
 
     email_body = (
