@@ -5940,3 +5940,114 @@ body:not(.dark-mode) .hero-panel-webpage {
         font-size: 12px !important;
     }
 }
+/* =====================================================
+   MOBILE HERO — rebuild desktop corner-spread, no scale
+===================================================== */
+@media (max-width: 600px) {
+    .hero-3d-scene {
+        width: 320px !important;
+        height: 380px !important;
+        transform: none !important;          /* kill the scale that caused overlap */
+        perspective: 800px !important;
+        margin: 0 auto !important;
+    }
+
+    .hero-visual {
+        min-height: 380px !important;
+    }
+
+    /* Central monitor: smaller, perfectly centered behind panels */
+    .hero-panel-webpage {
+        width: 290px !important;
+        height: 180px !important;
+        left: 50% !important;
+        top: 50% !important;
+        transform: translate(-50%, -50%) !important;
+    }
+
+    /* PROJECT FLOW → top-left corner */
+    .hero-panel-flow {
+        width: 150px !important;
+        height: 178px !important;
+        left: -14px !important;
+        top: 30px !important;
+        transform: rotateY(6deg) rotateZ(-1deg) !important;
+    }
+
+    /* Code panel → top-right corner */
+    .hero-panel-code {
+        width: 140px !important;
+        height: 84px !important;
+        right: -14px !important;
+        left: auto !important;
+        top: 16px !important;
+        transform: rotateY(-6deg) rotateZ(1deg) !important;
+    }
+
+    /* HTML/CSS/C++ stack → bottom-right corner */
+    .hero-panel-data {
+        width: 86px !important;
+        height: 98px !important;
+        right: -10px !important;
+        left: auto !important;
+        top: auto !important;
+        bottom: 22px !important;
+        transform: rotateY(-6deg) rotateZ(-1deg) !important;
+    }
+
+    /* The tiny orbs just add clutter at this size — hide them on phones */
+    .hero-orb { display: none !important; }
+}
+/* =====================================================
+   MOBILE VISUAL FIXES — logo gap, full-screen burger, footer logo
+   Desktop untouched.
+===================================================== */
+
+/* 1. Pull "ARES GROUP" text closer to the logo on phones.
+      (The earlier mobile rule used translateY(-4px) which pushed it DOWN;
+       this overrides it with a stronger upward pull. Nudge ±2px if needed.) */
+@media (max-width: 850px) {
+    .logo-name {
+        transform: translateY(-12px) !important;
+    }
+}
+
+/* 2. Burger menu = full-screen overlay, square edges, no floating box.
+      Starts just below the header so the hamburger stays visible to close it. */
+@media (max-width: 850px) {
+    .mobile-navigation {
+        position: fixed !important;
+        top: 84px !important;
+        right: 0 !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        max-height: calc(100vh - 84px) !important;
+        overflow-y: auto !important;
+        border-radius: 0 !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        padding: 18px 16px 40px !important;
+    }
+    .mobile-navigation.open {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    /* make sure the theme toggle inside the menu is visible */
+    .mobile-theme-toggle {
+        display: inline-flex !important;
+    }
+}
+@media (max-width: 600px) {
+    .mobile-navigation {
+        top: 74px !important;
+        max-height: calc(100vh - 74px) !important;
+    }
+}
+
+/* 3. Footer logo bigger on phones */
+@media (max-width: 600px) {
+    .footer-logo {
+        width: 110px !important;
+    }
+}
